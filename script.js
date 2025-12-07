@@ -59,6 +59,8 @@
             y: height / 2,
             r: 18,
             speed: 220,
+            acceleration: 2000,
+            friction: 8,
             vx: 0,
             vy: 0,
             health: 100,
@@ -991,20 +993,45 @@
                 dy /= len;
             }
 
+            // Apply acceleration
+            if (dx !== 0 || dy !== 0) {
+                player.vx += dx * player.acceleration * delta;
+                player.vy += dy * player.acceleration * delta;
+            }
+
+            // Apply friction
+            player.vx -= player.vx * player.friction * delta;
+            player.vy -= player.vy * player.friction * delta;
+
+            // Cap speed
+            const currentSpeed = Math.hypot(player.vx, player.vy);
+            if (currentSpeed > player.speed) {
+                const scale = player.speed / currentSpeed;
+                player.vx *= scale;
+                player.vy *= scale;
+            }
+
+            // Stop completely if very slow
+            if (Math.abs(player.vx) < 5) player.vx = 0;
+            if (Math.abs(player.vy) < 5) player.vy = 0;
+
             // Move X
-            player.x += dx * player.speed * delta;
+            player.x += player.vx * delta;
+
             for (const obs of obstacles) {
                 if (circleRectCollide(player.x, player.y, player.r, obs.x, obs.y, obs.w, obs.h)) {
-                    player.x -= dx * player.speed * delta;
+                    player.x -= player.vx * delta;
+                    player.vx = 0;
                     break;
                 }
             }
 
             // Move Y
-            player.y += dy * player.speed * delta;
+            player.y += player.vy * delta;
             for (const obs of obstacles) {
                 if (circleRectCollide(player.x, player.y, player.r, obs.x, obs.y, obs.w, obs.h)) {
-                    player.y -= dy * player.speed * delta;
+                    player.y -= player.vy * delta;
+                    player.vy = 0;
                     break;
                 }
             }
