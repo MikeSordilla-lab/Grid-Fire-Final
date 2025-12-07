@@ -1228,6 +1228,19 @@
             
             // Loot pickup
             pickupNearbyLoot();
+
+            // Reload Ring Update
+            const currentWeapon = inventory[selectedSlot];
+            const reloadRing = document.getElementById('reloadRing');
+            if (currentWeapon && currentWeapon.reloading) {
+                reloadRing.classList.add('active');
+                reloadRing.style.left = `${player.x}px`;
+                reloadRing.style.top = `${player.y}px`;
+            } else {
+                reloadRing.classList.remove('active');
+            }
+
+            
         }
 
         function spawnEnemy() {
