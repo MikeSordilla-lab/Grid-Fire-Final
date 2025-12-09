@@ -22,7 +22,12 @@
         
         const hotbarEl = document.getElementById("hotbar");
         const healthBar = document.getElementById("healthBar");
-        const ultimateBar = document.getElementById("ultimateBar");
+
+        
+        // XP Elements
+        const xpBarFill = document.getElementById("xpBarFill");
+        const levelBadge = document.getElementById("levelBadge");
+        const levelUpNotification = document.getElementById("levelUpNotification");
         
         const waveNumEl = document.getElementById("waveNum");
         const enemyCountEl = document.getElementById("enemyCount");
@@ -51,7 +56,13 @@
         let wave = 1;
         let enemiesInWave = 5;
         let enemiesDefeated = 0;
+
         let shopOpen = false;
+        
+        // XP System
+        let xp = 0;
+        let level = 1;
+        let xpToNextLevel = 100;
 
         // Player object
         const player = {
@@ -72,7 +83,15 @@
             swinging: false,
             swingProgress: 0,
             swingDuration: 0.2, // seconds
-            swingAngle: 0
+
+            swingAngle: 0,
+            // Dash
+            dashCooldown: 0,
+            dashMaxCooldown: 3000,
+            dashing: false,
+            dashTime: 0,
+            dashDuration: 0.15,
+            dashSpeed: 800
         };
 
         // Weapon upgrades
@@ -263,7 +282,8 @@
                 obstacles.push({ x: width * 0.8 - 60, y: height * 0.2, w: 60, h: 60, color: "#334155" });
                 obstacles.push({ x: width * 0.2, y: height * 0.8 - 60, w: 60, h: 60, color: "#334155" });
                 obstacles.push({ x: width * 0.8 - 60, y: height * 0.8 - 60, w: 60, h: 60, color: "#334155" });
-                obstacles.push({ x: width * 0.5 - 30, y: height * 0.5 - 30, w: 60, h: 60, color: "#334155" });
+                // Removed center obstacle to avoid spawning on player
+                // obstacles.push({ x: width * 0.5 - 30, y: height * 0.5 - 30, w: 60, h: 60, color: "#334155" });
             } else if (type < 0.66) {
                 // Walls
                 obstacles.push({ x: width * 0.3, y: height * 0.2, w: 20, h: height * 0.6, color: "#334155" });
@@ -271,13 +291,34 @@
             } else {
                 // Scattered
                 for (let i = 0; i < 8; i++) {
-                    obstacles.push({
-                        x: rand(50, width - 100),
-                        y: rand(50, height - 100),
-                        w: rand(40, 80),
-                        h: rand(40, 80),
-                        color: "#334155"
-                    });
+                    let attempts = 0;
+                    let valid = false;
+                    let obj = {};
+                    
+                    while (!valid && attempts < 10) {
+                        attempts++;
+                        obj = {
+                            x: rand(50, width - 100),
+                            y: rand(50, height - 100),
+                            w: rand(40, 80),
+                            h: rand(40, 80),
+                            color: "#334155"
+                        };
+                        
+                        // Check if it overlaps player spawn (center)
+                        // Player starts at width/2, height/2 with radius 18. Give it some breathing room (e.g. 100px radius)
+                        const centerX = width / 2;
+                        const centerY = height / 2;
+                        
+                        // Simple rect overlap check with a "safe zone" box
+                        if (!rectIntersect(obj.x, obj.y, obj.w, obj.h, centerX - 60, centerY - 60, 120, 120)) {
+                            valid = true;
+                        }
+                    }
+                    
+                    if (valid) {
+                        obstacles.push(obj);
+                    }
                 }
             }
         }
@@ -448,6 +489,7 @@
                             dropLoot(enemy.x, enemy.y);
                             enemies.splice(j, 1);
                             enemiesDefeated++;
+                            addXP(enemy.score || 10);
                             checkWaveComplete();
                         }
                     }
@@ -559,7 +601,7 @@
                                 if (weapon.type === 'melee') {
                                     weapon.cooldown = Math.floor(weapon.cooldown * upgrade.multiplier);
                                 } else {
-                                    weapon.speed = weapon.speed * (2 - upgrade.multiplier);
+                                    weapon.speed = weapon.speed * upgrade.multiplier;
                                 }
                                 break;
                             case 'magazine':
@@ -642,7 +684,7 @@
             }
         });
         
-        canvas.addEventListener("mouseup", () => { 
+        window.addEventListener("mouseup", () => { 
             mouse.down = false; 
         });
         
@@ -795,6 +837,7 @@
                             dropLoot(enemies[i].x, enemies[i].y);
                             enemies.splice(i, 1);
                             enemiesDefeated++;
+                            addXP(enemies[i].score || 10);
                             checkWaveComplete();
                         }
                     }
@@ -910,7 +953,7 @@
                             if (inventory[emptySlot].type === 'gun') {
                                 inventory[emptySlot].magSize = Math.floor(inventory[emptySlot].magSize * Math.pow(upgrades.magazine.multiplier, upgrades.magazine.level - 1));
                                 inventory[emptySlot].reserve = Math.floor(inventory[emptySlot].reserve * Math.pow(upgrades.magazine.multiplier, upgrades.magazine.level - 1));
-                                inventory[emptySlot].speed = inventory[emptySlot].speed * Math.pow(2 - upgrades.fireRate.multiplier, upgrades.fireRate.level - 1);
+                                inventory[emptySlot].speed = inventory[emptySlot].speed * Math.pow(upgrades.fireRate.multiplier, upgrades.fireRate.level - 1);
                             }
                             inventory[emptySlot].dmg = Math.floor(inventory[emptySlot].dmg * Math.pow(upgrades.damage.multiplier, upgrades.damage.level - 1));
                             inventory[emptySlot].level = Math.max(upgrades.damage.level, upgrades.fireRate.level, upgrades.magazine.level);
@@ -1040,6 +1083,32 @@
             player.x = Math.max(player.r, Math.min(width - player.r, player.x));
             player.y = Math.max(player.r, Math.min(height - player.r, player.y));
             
+            // Update Dash
+            if (player.dashing) {
+                player.dashTime -= delta;
+                if (player.dashTime <= 0) {
+                    player.dashing = false;
+                    player.vx = 0;
+                    player.vy = 0;
+                }
+            } else if (player.dashCooldown > 0) {
+                player.dashCooldown -= delta * 1000;
+            }
+            
+            if (keys['shift'] && player.dashCooldown <= 0 && !player.dashing && (player.vx !== 0 || player.vy !== 0)) {
+                // Activate dash
+                player.dashing = true;
+                player.dashTime = player.dashDuration;
+                player.dashCooldown = player.dashMaxCooldown;
+                
+                // Boost velocity in current direction
+                const currentSpeed = Math.hypot(player.vx, player.vy);
+                if (currentSpeed > 0) {
+                    player.vx = (player.vx / currentSpeed) * player.dashSpeed;
+                    player.vy = (player.vy / currentSpeed) * player.dashSpeed;
+                }
+            }
+            
             // Update swing animation
             if (player.swinging) {
                 player.swingProgress += delta / player.swingDuration;
@@ -1097,6 +1166,7 @@
                             dropLoot(e.x, e.y);
                             enemies.splice(j, 1);
                             enemiesDefeated++;
+                            addXP(e.score || 10);
                             checkWaveComplete();
                         }
                         bullets.splice(i, 1);
@@ -1191,6 +1261,7 @@
                         // Kill enemy
                         enemies.splice(i, 1);
                         enemiesDefeated++;
+                        addXP(e.score || 20);
                         checkWaveComplete();
                         continue;
                     }
@@ -1235,12 +1306,36 @@
         function spawnEnemy() {
             // Spawn at edge
             let ex, ey;
-            if (Math.random() < 0.5) {
-                ex = Math.random() < 0.5 ? -20 : width + 20;
-                ey = Math.random() * height;
-            } else {
-                ex = Math.random() * width;
-                ey = Math.random() < 0.5 ? -20 : height + 20;
+            let attempts = 0;
+            let validPosition = false;
+            
+            while (!validPosition && attempts < 10) {
+                attempts++;
+                if (Math.random() < 0.5) {
+                    ex = Math.random() < 0.5 ? -20 : width + 20;
+                    ey = Math.random() * height;
+                } else {
+                    ex = Math.random() * width;
+                    ey = Math.random() < 0.5 ? -20 : height + 20;
+                }
+                
+                // Check collision with obstacles
+                let hitObstacle = false;
+                // Use a default size for checking (roughly standard enemy size)
+                const checkR = 20; 
+                for (const obs of obstacles) {
+                    if (circleRectCollide(ex, ey, checkR, obs.x, obs.y, obs.w, obs.h)) {
+                        hitObstacle = true;
+                        break;
+                    }
+                }
+                
+                if (!hitObstacle) validPosition = true;
+            }
+            
+            // If still invalid after attempts, just use center-ish but off-screen
+            if (!validPosition) {
+                ex = -50; ey = -50;
             }
 
             // Determine Enemy Type based on Wave
@@ -1520,6 +1615,32 @@
             enemyCountEl.textContent = enemies.length;
             
             updateHotbarUI();
+            updateHotbarUI();
+            
+            // Update XP UI
+            const xpPct = Math.min(100, (xp / xpToNextLevel) * 100);
+            xpBarFill.style.width = `${xpPct}%`;
+            levelBadge.textContent = level;
+        }
+        
+        function addXP(amount) {
+            xp += amount;
+            if (xp >= xpToNextLevel) {
+                level++;
+                xp -= xpToNextLevel;
+                xpToNextLevel = Math.floor(xpToNextLevel * 1.2);
+                
+                // Show Notification
+                levelUpNotification.querySelector('.level-up-desc').textContent = `REACHED LEVEL ${level}`;
+                levelUpNotification.classList.remove('hidden');
+                setTimeout(() => {
+                    levelUpNotification.classList.add('hidden');
+                }, 3000);
+                
+                // Visual fanfare could go here
+                createScorePopup(player.x, player.y - 50, "LEVEL UP!");
+            }
+            updateUI();
         }
 
         function gameOver() {
