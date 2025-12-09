@@ -55,6 +55,7 @@
         let coins = 0;
         let wave = 1;
         let enemiesInWave = 5;
+        let enemiesSpawnedInCurrentWave = 0;
         let enemiesDefeated = 0;
 
         let shopOpen = false;
@@ -622,16 +623,21 @@
         
         function startNextWave() {
             wave++;
-            enemiesInWave = 5 + wave * 2;
+            enemiesInWave = 5 + Math.floor(wave * 2.5); // Slightly more enemies per wave
             enemiesDefeated = 0;
-            spawnInterval = Math.max(200, 1000 - wave * 50);
+            enemiesSpawnedInCurrentWave = 0;
+            spawnInterval = Math.max(200, 1000 - wave * 30); // Cap speed at 200ms
             waveIndicator.textContent = `WAVE ${wave}`;
             waveIndicator.style.opacity = 1;
             setTimeout(() => { waveIndicator.style.opacity = 0.8; }, 2000); // Keep it visible but slightly faded
         }
         
         function checkWaveComplete() {
-            if (enemiesDefeated >= enemiesInWave && enemies.length === 0) {
+            // Logic:
+            // 1. Defeated enough enemies
+            // 2. OR We spawned enough enemies AND they are all gone (failsafe for glitches)
+            if ((enemiesDefeated >= enemiesInWave && enemies.length === 0) || 
+                (enemiesSpawnedInCurrentWave >= enemiesInWave && enemies.length === 0)) {
                 openUpgradeShop();
             }
         }
@@ -778,6 +784,7 @@
             wave = 1;
             enemiesInWave = 5;
             enemiesDefeated = 0;
+            enemiesSpawnedInCurrentWave = 0;
             shopOpen = false;
 
             // Reset upgrades
@@ -1208,11 +1215,13 @@
                 }
             }
 
-            // Enemies
+            // Enemies Spawning Logic
             spawnTimer += delta * 1000;
-            if (spawnTimer > spawnInterval && enemies.length < enemiesInWave - enemiesDefeated) {
+            // Spawn if: Timer ready AND we haven't spawned enough for this wave yet
+            if (spawnTimer > spawnInterval && enemiesSpawnedInCurrentWave < enemiesInWave) {
                 spawnTimer = 0;
                 spawnEnemy();
+                enemiesSpawnedInCurrentWave++;
             }
 
             for (let i = enemies.length - 1; i >= 0; i--) {
