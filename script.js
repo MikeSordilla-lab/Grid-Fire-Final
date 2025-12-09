@@ -1048,7 +1048,8 @@
 
             // Cap speed
             const currentSpeed = Math.hypot(player.vx, player.vy);
-            if (currentSpeed > player.speed) {
+            // Cap speed ONLY if not dashing
+            if (!player.dashing && currentSpeed > player.speed) {
                 const scale = player.speed / currentSpeed;
                 player.vx *= scale;
                 player.vy *= scale;
@@ -1095,18 +1096,15 @@
                 player.dashCooldown -= delta * 1000;
             }
             
-            if (keys['shift'] && player.dashCooldown <= 0 && !player.dashing && (player.vx !== 0 || player.vy !== 0)) {
+            if (keys['shift'] && player.dashCooldown <= 0 && !player.dashing && (dx !== 0 || dy !== 0)) {
                 // Activate dash
                 player.dashing = true;
                 player.dashTime = player.dashDuration;
                 player.dashCooldown = player.dashMaxCooldown;
                 
-                // Boost velocity in current direction
-                const currentSpeed = Math.hypot(player.vx, player.vy);
-                if (currentSpeed > 0) {
-                    player.vx = (player.vx / currentSpeed) * player.dashSpeed;
-                    player.vy = (player.vy / currentSpeed) * player.dashSpeed;
-                }
+                // Boost velocity in INPUT direction (dx, dy are already normalized input vectors)
+                player.vx = dx * player.dashSpeed;
+                player.vy = dy * player.dashSpeed;
             }
             
             // Update swing animation
